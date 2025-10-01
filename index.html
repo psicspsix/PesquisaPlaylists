@@ -32,6 +32,9 @@
         #loading {
             margin-top: 20px;
         }
+        .playlist-name {
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -79,7 +82,6 @@
                     fullHtml = await response.text();
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(fullHtml, 'text/html');
-                    // Extract text from all relevant elements to handle complex page structure
                     const textNodes = [];
                     const walker = doc.createTreeWalker(doc.body, Node.TEXT_NODE);
                     let node;
@@ -91,15 +93,18 @@
                     }
                     const lines = textNodes.filter(l => l && !l.match(/^\s*$/));
 
-                    // Construir mapa de playlists
+                    // Construir mapa de playlists, evitando duplicatas
                     let currentPlaylist = null;
+                    const seenSongs = new Set();
                     for (let line of lines) {
                         const cleanedLine = line.replace(/\s+/g, ' ').trim();
                         if (playlistNames.includes(cleanedLine)) {
                             currentPlaylist = cleanedLine;
                             playlistMap.set(currentPlaylist, []);
-                        } else if (currentPlaylist && cleanedLine) {
+                            seenSongs.clear(); // Resetar para nova playlist
+                        } else if (currentPlaylist && cleanedLine && !seenSongs.has(cleanedLine)) {
                             playlistMap.get(currentPlaylist).push(cleanedLine);
+                            seenSongs.add(cleanedLine);
                         }
                     }
                     if (playlistMap.size === 0) {
@@ -141,11 +146,16 @@
             }
 
             let resultItems = [];
+            const seenResults = new Set(); // Evitar duplicatas nos resultados
             for (let [playlist, songs] of playlistMap) {
                 for (let song of songs) {
                     const lowerSong = song.toLowerCase();
                     if (words.every(w => lowerSong.includes(w))) {
-                        resultItems.push(`<p>${song} (em ${playlist}) <button onclick="showHighlighted('${song.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`);
+                        const resultKey = `${song}|${playlist}`;
+                        if (!seenResults.has(resultKey)) {
+                            resultItems.push(`<p>${song} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (em <span class="playlist-name">${playlist}</span>) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <button onclick="showHighlighted('${song.replace(/'/g, "\\'")}', '${playlist.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`);
+                            seenResults.add(resultKey);
+                        }
                     }
                 }
             }
@@ -153,25 +163,62 @@
             resultsDiv.innerHTML = resultItems.length > 0 ? resultItems.join('') : '<p>Nenhuma ocorrência encontrada.</p>';
         }
 
-        function showHighlighted(song) {
+        function showHighlighted(song, playlist) {
             const search = document.getElementById('search').value.trim();
             const words = search.split(/\s+/).filter(w => w);
             if (words.length === 0) return;
 
             const parser = new DOMParser();
             const doc = parser.parseFromString(fullHtml, 'text/html');
+            let targetId = null;
+            let counter = 0;
+
+            // Adicionar IDs aos nós de texto para rolagem
+            const walker = doc.createTreeWalker(doc.body, Node.TEXT_NODE);
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                const cleanedText = text.replace(/\s+/g, ' ').trim();
+                if (cleanedText === song || cleanedText === playlist) {
+                    const id = `text-${counter++}`;
+                    const span = doc.createElement('span');
+                    span.id = id;
+                    span.textContent = text;
+                    node.parentNode.replaceChild(span, node);
+                    if (cleanedText === song && !targetId) {
+                        targetId = id; // Marcar a primeira ocorrência da música
+                    }
+                }
+            }
+
+            // Destacar palavras pesquisadas
             words.forEach(word => highlight(doc.body, word, song));
 
             const newHtml = new XMLSerializer().serializeToString(doc);
             const win = window.open('');
             if (win) {
-                win.document.write(newHtml);
+                win.document.write(`
+                    <html>
+                        <head>
+                            <style>
+                                span.highlight { background-color: yellow; color: black; }
+                            </style>
+                        </head>
+                        <body>${newHtml}</body>
+                        <script>
+                            const target = document.getElementById('${targetId}');
+                            if (target) {
+                                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        </script>
+                    </html>
+                `);
                 win.document.close();
             }
         }
 
         function highlight(node, term, targetSong) {
-            if (node.nodeType === 3) {
+            if (node.nodeType === 3 || (node.nodeType === 1 && node.tagName === 'SPAN')) {
                 const text = node.textContent;
                 const lowerText = text.toLowerCase();
                 const lowerTerm = term.toLowerCase();
@@ -182,8 +229,7 @@
                     parts.forEach((part, index) => {
                         if (index % 2 === 1) {
                             const span = document.createElement('span');
-                            span.style.backgroundColor = 'yellow';
-                            span.style.color = 'black';
+                            span.className = 'highlight';
                             span.textContent = part;
                             fragment.appendChild(span);
                         } else {
