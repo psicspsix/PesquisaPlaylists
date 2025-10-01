@@ -57,9 +57,9 @@
 
         async function loadContent() {
             const proxies = [
-                'https://corsproxy.io/?',
+                'https://api.codetabs.com/v1/proxy?quest=',
                 'https://api.allorigins.win/raw?url=',
-                'https://cors-anywhere.herokuapp.com/'
+                'https://corsproxy.io/?'
             ];
             let success = false;
             let errorMsg = '';
@@ -79,21 +79,31 @@
                     fullHtml = await response.text();
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(fullHtml, 'text/html');
-                    const text = doc.body.innerText;
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+                    // Extract text from all relevant elements to handle complex page structure
+                    const textNodes = [];
+                    const walker = doc.createTreeWalker(doc.body, Node.TEXT_NODE);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        const text = node.textContent.trim();
+                        if (text && !text.startsWith('http') && !text.includes('Google Sites')) {
+                            textNodes.push(text);
+                        }
+                    }
+                    const lines = textNodes.filter(l => l && !l.match(/^\s*$/));
 
                     // Construir mapa de playlists
                     let currentPlaylist = null;
                     for (let line of lines) {
-                        if (playlistNames.includes(line)) {
-                            currentPlaylist = line;
+                        const cleanedLine = line.replace(/\s+/g, ' ').trim();
+                        if (playlistNames.includes(cleanedLine)) {
+                            currentPlaylist = cleanedLine;
                             playlistMap.set(currentPlaylist, []);
-                        } else if (currentPlaylist) {
-                            playlistMap.get(currentPlaylist).push(line);
+                        } else if (currentPlaylist && cleanedLine) {
+                            playlistMap.get(currentPlaylist).push(cleanedLine);
                         }
                     }
                     if (playlistMap.size === 0) {
-                        throw new Error('Nenhuma playlist encontrada na página.');
+                        throw new Error('Nenhuma playlist encontrada. A estrutura da página pode ter mudado.');
                     }
                     success = true;
                     break;
@@ -106,6 +116,7 @@
             const loadingDiv = document.getElementById('loading');
             if (success) {
                 loadingDiv.style.display = 'none';
+                console.log('Playlists carregadas:', Array.from(playlistMap.keys()));
             } else {
                 loadingDiv.innerHTML = `<p>Erro ao carregar os dados das playlists: ${errorMsg}. Tente novamente mais tarde ou verifique se o site está acessível.</p>`;
             }
