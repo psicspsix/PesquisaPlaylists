@@ -195,22 +195,20 @@
             const newHtml = new XMLSerializer().serializeToString(doc);
             const win = window.open('');
             if (win) {
-                win.document.write(`
-                    <html>
-                        <head>
-                            <style>
-                                span.highlight { background-color: yellow; color: black; }
-                            </style>
-                        </head>
-                        <body>${newHtml}</body>
-                        <script>
-                            const target = document.getElementById('${targetId}');
-                            if (target) {
-                                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }
-                        </script>
-                    </html>
-                `);
+                win.document.write(
+                    '<html>' +
+                    '<head>' +
+                    '<style>span.highlight { background-color: yellow; color: black; }</style>' +
+                    '</head>' +
+                    '<body>' + newHtml + '</body>' +
+                    '<script>' +
+                    'const target = document.getElementById("' + targetId + '");' +
+                    'if (target) {' +
+                    'target.scrollIntoView({ behavior: "smooth", block: "center" });' +
+                    '}' +
+                    '</script>' +
+                    '</html>'
+                );
                 win.document.close();
             }
         }
