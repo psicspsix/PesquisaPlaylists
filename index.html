@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
+    <meta charset="UTF-8">
     <title>Pesquisas nas listas de músicas de Jorge da Amazon</title>
     <style>
         body {
@@ -32,6 +33,9 @@
         #loading {
             margin-top: 20px;
         }
+        .playlist-name {
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -44,7 +48,7 @@
     <script>
         const targetUrl = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
         let fullHtml = '';
-        let playlistMap = new Map(); // playlist -> [songs]
+        let playlistMap = new Map();
         const playlistNames = [
             "S. Um", "S. Dois", "S. Três", "S. Quatro", "S. CInco", "Shazan S6",
             "S. Sete", "S. Oito", "S. Nove", "S. Dez", "Lentas",
@@ -79,7 +83,6 @@
                     fullHtml = await response.text();
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(fullHtml, 'text/html');
-                    // Extract text from all relevant elements to handle complex page structure
                     const textNodes = [];
                     const walker = doc.createTreeWalker(doc.body, Node.TEXT_NODE);
                     let node;
@@ -91,15 +94,17 @@
                     }
                     const lines = textNodes.filter(l => l && !l.match(/^\s*$/));
 
-                    // Construir mapa de playlists
                     let currentPlaylist = null;
+                    const seenSongs = new Set();
                     for (let line of lines) {
                         const cleanedLine = line.replace(/\s+/g, ' ').trim();
                         if (playlistNames.includes(cleanedLine)) {
                             currentPlaylist = cleanedLine;
                             playlistMap.set(currentPlaylist, []);
-                        } else if (currentPlaylist && cleanedLine) {
+                            seenSongs.clear();
+                        } else if (currentPlaylist && cleanedLine && !seenSongs.has(cleanedLine)) {
                             playlistMap.get(currentPlaylist).push(cleanedLine);
+                            seenSongs.add(cleanedLine);
                         }
                     }
                     if (playlistMap.size === 0) {
@@ -141,11 +146,16 @@
             }
 
             let resultItems = [];
+            const seenResults = new Set();
             for (let [playlist, songs] of playlistMap) {
                 for (let song of songs) {
                     const lowerSong = song.toLowerCase();
                     if (words.every(w => lowerSong.includes(w))) {
-                        resultItems.push(`<p>${song} (em ${playlist}) <button onclick="showHighlighted('${song.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`);
+                        const resultKey = `${song}|${playlist}`;
+                        if (!seenResults.has(resultKey)) {
+                            resultItems.push(`<p>${song} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (em <span class="playlist-name">${playlist}</span>) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <button onclick="showHighlighted('${song.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`);
+                            seenResults.add(resultKey);
+                        }
                     }
                 }
             }
@@ -165,7 +175,16 @@
             const newHtml = new XMLSerializer().serializeToString(doc);
             const win = window.open('');
             if (win) {
-                win.document.write(newHtml);
+                win.document.write(`
+                    <html>
+                        <head>
+                            <style>
+                                span.highlight { background-color: yellow; color: black; }
+                            </style>
+                        </head>
+                        <body>${newHtml}</body>
+                    </html>
+                `);
                 win.document.close();
             }
         }
@@ -182,8 +201,7 @@
                     parts.forEach((part, index) => {
                         if (index % 2 === 1) {
                             const span = document.createElement('span');
-                            span.style.backgroundColor = 'yellow';
-                            span.style.color = 'black';
+                            span.className = 'highlight';
                             span.textContent = part;
                             fragment.appendChild(span);
                         } else {
