@@ -1,100 +1,153 @@
-```html
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-    <meta charset="UTF-8">
-    <title>Pesquisas nas Playlists de Jorge</title>
+    <title>Pesquisas nas listas de músicas de Jorge da Amazon</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        #search { width: 90%; padding: 10px; margin-bottom: 20px; }
-        #results p { margin: 10px 0; }
-        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
-        #modal > div { background: white; margin: 10% auto; width: 80%; height: 80%; overflow: auto; padding: 20px; box-sizing: border-box; }
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        input {
+            width: 95%;
+            padding: 10px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        button {
+            background-color: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #555;
+        }
     </style>
 </head>
 <body>
-    <h1>Pesquisas nas Playlists de Jorge</h1>
-    <input type="text" id="search" placeholder="Digite as palavras a pesquisar">
+    <h1>Pesquisas nas listas de músicas de Jorge da Amazon</h1>
+    <br><br><br>
+    <input type="text" id="search" placeholder="Digite as palavras a procurar (separadas por espaço)" oninput="performSearch()">
     <div id="results"></div>
-    <div id="modal">
-        <div>
-            <button onclick="closeModal()">Fechar</button>
-            <div id="playlistContent"></div>
-        </div>
-    </div>
 
     <script>
-        const url = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
-        const playlistNames = ["S. Um", "S. Dois", "S. Três", "S. Quatro", "S. CInco", "Shazan S6", "S. Sete", "S. Oito", "S. Nove", "S. Dez", "Lentas", "MENOS 10 (Echo Studio - Amazon Prime)", "Curta", "Novas", "Setenta Milhões", "Seleção Um", "Seleção Dois", "Seleção Três", "Seleção Atual", "Sem Limites (Echo Dot - Amazon Music Unlimited)", "Miscelânea (Biblioteca)", "Jorge Nacional", "Jorge Internacional", "Minhas Curtidas"];
-        let playlists = {};
+        const targetUrl = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
+        let fullHtml = '';
+        let playlistMap = new Map(); // playlist -> [songs]
+        const playlistNames = [
+            "S. Um", "S. Dois", "S. Três", "S. Quatro", "S. CInco", "Shazan S6",
+            "S. Sete", "S. Oito", "S. Nove", "S. Dez", "Lentas",
+            "MENOS 10 (Echo Studio - Amazon Prime)", "Curta", "Novas",
+            "Setenta Milhões", "Seleção Um", "Seleção Dois", "Seleção Três",
+            "Seleção Atual", "Sem Limites (Echo Dot - Amazon Music Unlimited)",
+            "Miscelânea (Biblioteca)", "Jorge Nacional", "Jorge Internacional",
+            "Minhas Curtidas"
+        ];
 
-        async function loadData() {
+        async function loadContent() {
+            const proxy = 'https://api.allorigins.win/raw?url=';
             try {
-                const res = await fetch(url);
-                const html = await res.text();
-                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const response = await fetch(proxy + encodeURIComponent(targetUrl));
+                if (!response.ok) {
+                    throw new Error('Falha ao carregar o conteúdo');
+                }
+                fullHtml = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(fullHtml, 'text/html');
                 const text = doc.body.innerText;
-                const lines = text.split('\n').map(l => l.trim()).filter(l => l && l !== '----------------------------------------------------------------------------------------------------');
-                let current = null;
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+
+                // Construir mapa de playlists
+                let currentPlaylist = null;
                 for (let line of lines) {
                     if (playlistNames.includes(line)) {
-                        current = line;
-                        playlists[current] = [];
-                    } else if (current) {
-                        playlists[current].push(line);
+                        currentPlaylist = line;
+                        playlistMap.set(currentPlaylist, []);
+                    } else if (currentPlaylist) {
+                        playlistMap.get(currentPlaylist).push(line);
                     }
                 }
-            } catch (e) {
-                console.error(e);
-                alert('Erro ao carregar os dados das playlists. Verifique se o site permite acesso via fetch (CORS). Se não, considere usar um proxy CORS.');
+            } catch (error) {
+                console.error(error);
+                document.getElementById('results').innerHTML = '<p>Erro ao carregar o conteúdo da página. Verifique o console para detalhes.</p>';
             }
         }
 
-        loadData();
+        loadContent();
 
-        const searchInput = document.getElementById('search');
-        const resultsDiv = document.getElementById('results');
+        function performSearch() {
+            const search = document.getElementById('search').value.trim();
+            const words = search.split(/\s+/).filter(w => w).map(w => w.toLowerCase());
+            document.getElementById('results').innerHTML = '';
 
-        searchInput.addEventListener('input', search);
-
-        function search() {
-            const term = searchInput.value.trim();
-            if (!term) {
-                resultsDiv.innerHTML = '';
+            if (words.length === 0) {
                 return;
             }
-            const terms = term.toLowerCase().split(/\s+/).filter(w => w);
-            let results = '';
-            for (let pl in playlists) {
-                playlists[pl].forEach(song => {
-                    const songLower = song.toLowerCase();
-                    if (terms.every(word => songLower.includes(word))) {
-                        results += `<p>${song} - ${pl} <button onclick="showPlaylist('${pl.replace(/'/g, "\\'")}', '${term.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`;
+
+            let resultItems = [];
+            for (let [playlist, songs] of playlistMap) {
+                for (let song of songs) {
+                    const lowerSong = song.toLowerCase();
+                    if (words.every(w => lowerSong.includes(w))) {
+                        resultItems.push(`<p>${song} (em ${playlist}) <button onclick="showHighlighted()">MOSTRAR</button></p>`);
                     }
-                });
+                }
             }
-            resultsDiv.innerHTML = results || '<p>Nenhuma ocorrência encontrada.</p>';
+
+            document.getElementById('results').innerHTML = resultItems.length > 0 ? resultItems.join('') : '<p>Nenhuma ocorrência encontrada.</p>';
         }
 
-        window.showPlaylist = function(pl, term) {
-            const terms = term.split(/\s+/).filter(w => w);
-            let content = `<h2>${pl}</h2>`;
-            playlists[pl].forEach(song => {
-                let displayed = song;
-                terms.forEach(word => {
-                    const regex = new RegExp(word, 'gi');
-                    displayed = displayed.replace(regex, match => `<span style="background:yellow">${match}</span>`);
-                });
-                content += `<p>${displayed}</p>`;
-            });
-            document.getElementById('playlistContent').innerHTML = content;
-            document.getElementById('modal').style.display = 'block';
+        function showHighlighted() {
+            const search = document.getElementById('search').value.trim();
+            const words = search.split(/\s+/).filter(w => w);
+            if (words.length === 0) return;
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(fullHtml, 'text/html');
+            words.forEach(word => highlight(doc.body, word));
+
+            const newHtml = new XMLSerializer().serializeToString(doc);
+            const win = window.open('');
+            if (win) {
+                win.document.write(newHtml);
+                win.document.close();
+            }
         }
 
-        window.closeModal = function() {
-            document.getElementById('modal').style.display = 'none';
+        function highlight(node, term) {
+            if (node.nodeType === 3) {
+                const text = node.textContent;
+                const lowerText = text.toLowerCase();
+                const lowerTerm = term.toLowerCase();
+                if (lowerText.includes(lowerTerm)) {
+                    const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                    const parts = text.split(regex);
+                    const fragment = document.createDocumentFragment();
+                    parts.forEach((part, index) => {
+                        if (index % 2 === 1) {
+                            const span = document.createElement('span');
+                            span.style.backgroundColor = 'yellow';
+                            span.style.color = 'black'; // Para melhor legibilidade
+                            span.textContent = part;
+                            fragment.appendChild(span);
+                        } else {
+                            fragment.appendChild(document.createTextNode(part));
+                        }
+                    });
+                    node.parentNode.replaceChild(fragment, node);
+                }
+            } else {
+                const children = Array.from(node.childNodes);
+                children.forEach(child => highlight(child, term));
+            }
         }
     </script>
 </body>
 </html>
-```
