@@ -1,163 +1,100 @@
+```html
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pesquisas nas Playlists de Jorge</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f4f4;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        .search-container {
-            margin: 20px 0;
-            display: flex;
-            justify-content: center;
-        }
-        #searchInput {
-            width: 90%;
-            padding: 10px;
-            font-size: 16px;
-            border: 2px solid #ccc;
-            border-radius: 5px;
-        }
-        #results {
-            margin-top: 20px;
-        }
-        .result-item {
-            background-color: white;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .result-item span {
-            flex-grow: 1;
-        }
-        .result-item button {
-            padding: 8px 12px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .result-item button:hover {
-            background-color: #0056b3;
-        }
-        .error {
-            color: red;
-            text-align: center;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #search { width: 90%; padding: 10px; margin-bottom: 20px; }
+        #results p { margin: 10px 0; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+        #modal > div { background: white; margin: 10% auto; width: 80%; height: 80%; overflow: auto; padding: 20px; box-sizing: border-box; }
     </style>
 </head>
 <body>
     <h1>Pesquisas nas Playlists de Jorge</h1>
-    <div class="search-container">
-        <input type="text" id="searchInput" placeholder="Digite o nome da música ou palavras-chave...">
-    </div>
+    <input type="text" id="search" placeholder="Digite as palavras a pesquisar">
     <div id="results"></div>
+    <div id="modal">
+        <div>
+            <button onclick="closeModal()">Fechar</button>
+            <div id="playlistContent"></div>
+        </div>
+    </div>
 
     <script>
-        const PLAYLIST_URL = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
-        const DATA_URL = 'playlists.json'; // Local JSON file in the repository
+        const url = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
+        const playlistNames = ["S. Um", "S. Dois", "S. Três", "S. Quatro", "S. CInco", "Shazan S6", "S. Sete", "S. Oito", "S. Nove", "S. Dez", "Lentas", "MENOS 10 (Echo Studio - Amazon Prime)", "Curta", "Novas", "Setenta Milhões", "Seleção Um", "Seleção Dois", "Seleção Três", "Seleção Atual", "Sem Limites (Echo Dot - Amazon Music Unlimited)", "Miscelânea (Biblioteca)", "Jorge Nacional", "Jorge Internacional", "Minhas Curtidas"];
+        let playlists = {};
 
-        async function fetchPlaylistData() {
+        async function loadData() {
             try {
-                const response = await fetch(DATA_URL);
-                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                return await response.json();
-            } catch (error) {
-                console.error('Error fetching playlist data:', error);
-                document.getElementById('results').innerHTML = `<p class="error">Erro ao carregar os dados das playlists: ${error.message}. Verifique se o arquivo playlists.json está presente.</p>`;
-                return null;
+                const res = await fetch(url);
+                const html = await res.text();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const text = doc.body.innerText;
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l && l !== '----------------------------------------------------------------------------------------------------');
+                let current = null;
+                for (let line of lines) {
+                    if (playlistNames.includes(line)) {
+                        current = line;
+                        playlists[current] = [];
+                    } else if (current) {
+                        playlists[current].push(line);
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao carregar os dados das playlists. Verifique se o site permite acesso via fetch (CORS). Se não, considere usar um proxy CORS.');
             }
         }
 
-        async function searchSongs(query) {
-            const songsByPlaylist = await fetchPlaylistData();
-            if (!songsByPlaylist) return;
+        loadData();
 
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
-            query = query.toLowerCase().trim();
+        const searchInput = document.getElementById('search');
+        const resultsDiv = document.getElementById('results');
 
-            if (!query) {
-                resultsDiv.innerHTML = '<p>Digite uma palavra-chave para buscar.</p>';
+        searchInput.addEventListener('input', search);
+
+        function search() {
+            const term = searchInput.value.trim();
+            if (!term) {
+                resultsDiv.innerHTML = '';
                 return;
             }
-
-            let hasResults = false;
-            for (const [playlist, songs] of Object.entries(songsByPlaylist)) {
-                songs.forEach(song => {
-                    if (song.toLowerCase().includes(query)) {
-                        hasResults = true;
-                        const resultItem = document.createElement('div');
-                        resultItem.className = 'result-item';
-                        resultItem.innerHTML = `
-                            <span><strong>${playlist}</strong>: ${song}</span>
-                            <button onclick="highlightSong('${encodeURIComponent(song)}', '${encodeURIComponent(playlist)}')">MOSTRAR</button>
-                        `;
-                        resultsDiv.appendChild(resultItem);
+            const terms = term.toLowerCase().split(/\s+/).filter(w => w);
+            let results = '';
+            for (let pl in playlists) {
+                playlists[pl].forEach(song => {
+                    const songLower = song.toLowerCase();
+                    if (terms.every(word => songLower.includes(word))) {
+                        results += `<p>${song} - ${pl} <button onclick="showPlaylist('${pl.replace(/'/g, "\\'")}', '${term.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`;
                     }
                 });
             }
-
-            if (!hasResults) {
-                resultsDiv.innerHTML = '<p>Nenhuma música encontrada para a busca.</p>';
-            }
+            resultsDiv.innerHTML = results || '<p>Nenhuma ocorrência encontrada.</p>';
         }
 
-        function highlightSong(song, playlist) {
-            const url = PLAYLIST_URL;
-            const newWindow = window.open(url, '_blank');
-            newWindow.addEventListener('load', () => {
-                try {
-                    const script = newWindow.document.createElement('script');
-                    script.textContent = `
-                        try {
-                            const song = decodeURIComponent('${encodeURIComponent(song)}');
-                            const elements = document.querySelectorAll('div, p, li');
-                            elements.forEach(el => {
-                                if (el.textContent.includes(song)) {
-                                    el.style.backgroundColor = 'yellow';
-                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }
-                            });
-                        } catch (e) {
-                            console.error('Error highlighting song:', e);
-                        }
-                    `;
-                    newWindow.document.body.appendChild(script);
-                } catch (error) {
-                    console.error('Error injecting highlight script:', error);
-                    alert('Não foi possível destacar a música devido a restrições de segurança. A página foi aberta.');
-                }
-            }, { once: true });
+        window.showPlaylist = function(pl, term) {
+            const terms = term.split(/\s+/).filter(w => w);
+            let content = `<h2>${pl}</h2>`;
+            playlists[pl].forEach(song => {
+                let displayed = song;
+                terms.forEach(word => {
+                    const regex = new RegExp(word, 'gi');
+                    displayed = displayed.replace(regex, match => `<span style="background:yellow">${match}</span>`);
+                });
+                content += `<p>${displayed}</p>`;
+            });
+            document.getElementById('playlistContent').innerHTML = content;
+            document.getElementById('modal').style.display = 'block';
         }
 
-        // Debounce function to limit search frequency
-        function debounce(func, wait) {
-            let timeout;
-            return function (...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
-            };
+        window.closeModal = function() {
+            document.getElementById('modal').style.display = 'none';
         }
-
-        // Event listener for search input
-        document.getElementById('searchInput').addEventListener('input', debounce(e => {
-            searchSongs(e.target.value);
-        }, 300));
     </script>
 </body>
 </html>
+```
