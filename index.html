@@ -11,7 +11,7 @@
             padding: 20px;
         }
         input {
-            width: 95%;
+            width: 80%;
             padding: 10px;
             background-color: #333;
             color: white;
@@ -24,8 +24,10 @@
             background-color: #444;
             color: white;
             border: 1px solid #666;
-            padding: 5px 10px;
+            padding: 10px 20px;
             cursor: pointer;
+            margin-left: 10px;
+            vertical-align: top;
         }
         button:hover {
             background-color: #555;
@@ -36,16 +38,28 @@
         .playlist-name {
             font-weight: bold;
         }
+        .input-container {
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
     <h1>Pesquisas nas listas de músicas de Jorge da Amazon</h1>
     <br><br><br>
-    <input type="text" id="search" placeholder="Digite as palavras a procurar (separadas por espaço)" oninput="performSearch()">
+    <div class="input-container">
+        <input type="text" id="search" placeholder="Digite as palavras a procurar (separadas por espaço)" oninput="performSearch()">
+        <button onclick="clearSearch()">Limpar</button>
+    </div>
     <div id="loading">Carregando playlists...</div>
     <div id="results"></div>
 
     <script>
+        // Set focus on the search input when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('search').focus();
+        });
+
         const targetUrl = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
         let fullHtml = '';
         let playlistMap = new Map();
@@ -161,6 +175,14 @@
             }
 
             resultsDiv.innerHTML = resultItems.length > 0 ? resultItems.join('') : '<p>Nenhuma ocorrência encontrada.</p>';
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('search');
+            const resultsDiv = document.getElementById('results');
+            searchInput.value = '';
+            resultsDiv.innerHTML = '';
+            searchInput.focus(); // Return focus to input after clearing
         }
 
         function showHighlighted(song) {
