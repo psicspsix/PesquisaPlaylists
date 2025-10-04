@@ -205,6 +205,14 @@
                             </style>
                         </head>
                         <body>${newHtml}</body>
+                        <script>
+                            window.onload = function() {
+                                var highlight = document.querySelector('.highlight');
+                                if (highlight) {
+                                    highlight.scrollIntoView({behavior: 'smooth', block: 'center'});
+                                }
+                            };
+                        <\/script>
                     </html>
                 `);
                 win.document.close();
