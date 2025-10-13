@@ -175,7 +175,11 @@
                 }
             }
 
-            resultsDiv.innerHTML = resultItems.length > 0 ? resultItems.join('') : '<p>Nenhuma ocorrência encontrada.</p>';
+            if (resultItems.length > 0) {
+                resultsDiv.innerHTML = `<p>Encontradas: ${resultItems.length} músicas, álbuns ou coletâneas</p>` + resultItems.join('');
+            } else {
+                resultsDiv.innerHTML = '<p>Nenhuma ocorrência encontrada.</p>';
+            }
         }
 
         function clearSearch() {
