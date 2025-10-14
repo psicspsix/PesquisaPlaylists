@@ -144,9 +144,13 @@
 
         loadContent();
 
+        function removeAccents(str) {
+            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        }
+
         function performSearch() {
             const search = document.getElementById('search').value.trim();
-            const words = search.split(/\s+/).filter(w => w).map(w => w.toLowerCase());
+            const words = search.split(/\s+/).filter(w => w).map(w => removeAccents(w.toLowerCase()));
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
 
@@ -164,7 +168,7 @@
             const seenResults = new Set();
             for (let [playlist, songs] of playlistMap) {
                 for (let song of songs) {
-                    const lowerSong = song.toLowerCase();
+                    const lowerSong = removeAccents(song.toLowerCase());
                     if (words.every(w => lowerSong.includes(w))) {
                         const resultKey = `${song}|${playlist}`;
                         if (!seenResults.has(resultKey)) {
@@ -176,7 +180,7 @@
             }
 
             if (resultItems.length > 0) {
-                resultsDiv.innerHTML = `<p>Encontradas: ${resultItems.length} músicas, álbuns ou coletâneas</p>` + resultItems.join('');
+                resultsDiv.innerHTML = `<h3>Encontradas: ${resultItems.length} músicas</h3><br><br>` + resultItems.join('');
             } else {
                 resultsDiv.innerHTML = '<p>Nenhuma ocorrência encontrada.</p>';
             }
@@ -227,24 +231,39 @@
         function highlight(node, term, targetSong) {
             if (node.nodeType === 3) {
                 const text = node.textContent;
-                const lowerText = text.toLowerCase();
-                const lowerTerm = term.toLowerCase();
-                if (lowerText.includes(lowerTerm) && (!targetSong || text === targetSong)) {
-                    const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-                    const parts = text.split(regex);
-                    const fragment = document.createDocumentFragment();
-                    parts.forEach((part, index) => {
-                        if (index % 2 === 1) {
-                            const span = document.createElement('span');
-                            span.className = 'highlight';
-                            span.textContent = part;
-                            fragment.appendChild(span);
-                        } else {
-                            fragment.appendChild(document.createTextNode(part));
-                        }
-                    });
-                    node.parentNode.replaceChild(fragment, node);
+                if (!text.trim()) return;
+                const original = text;
+                const normalized = removeAccents(original.toLowerCase());
+                const normTerm = removeAccents(term.toLowerCase());
+                if (!normalized.includes(normTerm) || (targetSong && original !== targetSong)) {
+                    return;
                 }
+
+                const regex = new RegExp(`(${normTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                const matches = [];
+                let match;
+                while ((match = regex.exec(normalized)) !== null) {
+                    matches.push({start: match.index, end: match.index + match[0].length});
+                }
+
+                if (matches.length === 0) return;
+
+                const fragment = document.createDocumentFragment();
+                let lastEnd = 0;
+                for (let m of matches) {
+                    if (m.start > lastEnd) {
+                        fragment.appendChild(document.createTextNode(original.substring(lastEnd, m.start)));
+                    }
+                    const span = document.createElement('span');
+                    span.className = 'highlight';
+                    span.textContent = original.substring(m.start, m.end);
+                    fragment.appendChild(span);
+                    lastEnd = m.end;
+                }
+                if (lastEnd < original.length) {
+                    fragment.appendChild(document.createTextNode(original.substring(lastEnd)));
+                }
+                node.parentNode.replaceChild(fragment, node);
             } else {
                 const children = Array.from(node.childNodes);
                 children.forEach(child => highlight(child, term, targetSong));
