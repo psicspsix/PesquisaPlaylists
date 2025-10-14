@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Pesquisa nas Listas de Músicas da Amazon e Outras Fontes de Jorge</title>
+        <link rel="icon" href="https://raw.githubusercontent.com/psicspsix/Jogo-de-Forca/main/psicspsix.ico">
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        input {
+            width: 80%;
+            padding: 10px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        button {
+            background-color: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin-left: 10px;
+            vertical-align: top;
+        }
+        button:hover {
+            background-color: #555;
+        }
+        #loading {
+            margin-top: 20px;
+        }
+        .playlist-name {
+            font-weight: bold;
+        }
+        .input-container {
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pesquisa nas Listas de Músicas da Amazon e Outras Fontes de Jorge</h1>
+    <br><br><br>
+    <div class="input-container">
+        <input type="text" id="search" placeholder="Digite as palavras a procurar (separadas por espaço)" oninput="performSearch()">
+        <button onclick="clearSearch()">Limpar</button>
+    </div>
+    <div id="loading">Carregando playlists...</div>
+    <div id="results"></div>
+
+    <script>
+        // Set focus on the search input when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('search').focus();
+        });
+
+        const targetUrl = 'https://sites.google.com/view/playlists-amazon/p%C3%A1gina-inicial';
+        let fullHtml = '';
+        let playlistMap = new Map();
+        const playlistNames = [
+            "S. Um", "S. Dois", "S. Três", "S. Quatro", "S. CInco", "Shazan S6",
+            "S. Sete", "S. Oito", "S. Nove", "S. Dez", "Lentas",
+            "MENOS 10 (Echo Studio - Amazon Prime)", "Curta", "Novas",
+            "Setenta Milhões", "Seleção Um", "Seleção Dois", "Seleção Três",
+            "Seleção Atual", "Sem Limites (Echo Dot - Amazon Music Unlimited)",
+            "Miscelânea (Biblioteca)", "Jorge Nacional", "Jorge Internacional",
+            "iPhone 4 (Local Musics)", "Graphite Writer - Músicas", "Minhas Curtidas"
+        ];
+
+        async function loadContent() {
+            const proxies = [
+                'https://api.codetabs.com/v1/proxy?quest=',
+                'https://api.allorigins.win/raw?url=',
+                'https://corsproxy.io/?'
+            ];
+            let success = false;
+            let errorMsg = '';
+
+            for (const proxy of proxies) {
+                try {
+                    const response = await fetch(proxy + encodeURIComponent(targetUrl), {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'text/html',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Erro HTTP: ${response.status}`);
+                    }
+                    fullHtml = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(fullHtml, 'text/html');
+                    const textNodes = [];
+                    const walker = doc.createTreeWalker(doc.body, Node.TEXT_NODE);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        const text = node.textContent.trim();
+                        if (text && !text.startsWith('http') && !text.includes('Google Sites')) {
+                            textNodes.push(text);
+                        }
+                    }
+                    const lines = textNodes.filter(l => l && !l.match(/^\s*$/));
+
+                    let currentPlaylist = null;
+                    const seenSongs = new Set();
+                    for (let line of lines) {
+                        const cleanedLine = line.replace(/\s+/g, ' ').trim();
+                        if (playlistNames.includes(cleanedLine)) {
+                            currentPlaylist = cleanedLine;
+                            playlistMap.set(currentPlaylist, []);
+                            seenSongs.clear();
+                        } else if (currentPlaylist && cleanedLine && !seenSongs.has(cleanedLine)) {
+                            playlistMap.get(currentPlaylist).push(cleanedLine);
+                            seenSongs.add(cleanedLine);
+                        }
+                    }
+                    if (playlistMap.size === 0) {
+                        throw new Error('Nenhuma playlist encontrada. A estrutura da página pode ter mudado.');
+                    }
+                    success = true;
+                    break;
+                } catch (error) {
+                    errorMsg = error.message;
+                    console.error(`Erro com proxy ${proxy}:`, error);
+                }
+            }
+
+            const loadingDiv = document.getElementById('loading');
+            if (success) {
+                loadingDiv.style.display = 'none';
+                console.log('Playlists carregadas:', Array.from(playlistMap.keys()));
+            } else {
+                loadingDiv.innerHTML = `<p>Erro ao carregar os dados das playlists: ${errorMsg}. Tente novamente mais tarde ou verifique se o site está acessível.</p>`;
+            }
+        }
+
+        loadContent();
+
+        function performSearch() {
+            const search = document.getElementById('search').value.trim();
+            const words = search.split(/\s+/).filter(w => w).map(w => w.toLowerCase());
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (words.length === 0) {
+                resultsDiv.innerHTML = '<p>Digite palavras válidas para buscar.</p>';
+                return;
+            }
+
+            if (playlistMap.size === 0) {
+                resultsDiv.innerHTML = '<p>Aguardando carregamento das playlists...</p>';
+                return;
+            }
+
+            let resultItems = [];
+            const seenResults = new Set();
+            for (let [playlist, songs] of playlistMap) {
+                for (let song of songs) {
+                    const lowerSong = song.toLowerCase();
+                    if (words.every(w => lowerSong.includes(w))) {
+                        const resultKey = `${song}|${playlist}`;
+                        if (!seenResults.has(resultKey)) {
+                            resultItems.push(`<p>${song} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (em <span class="playlist-name">${playlist}</span>) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <button onclick="showHighlighted('${song.replace(/'/g, "\\'")}')">MOSTRAR</button></p>`);
+                            seenResults.add(resultKey);
+                        }
+                    }
+                }
+            }
+
+            if (resultItems.length > 0) {
+                resultsDiv.innerHTML = `<p>Encontradas: ${resultItems.length} músicas, álbuns ou coletâneas</p>` + resultItems.join('');
+            } else {
+                resultsDiv.innerHTML = '<p>Nenhuma ocorrência encontrada.</p>';
+            }
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('search');
+            const resultsDiv = document.getElementById('results');
+            searchInput.value = '';
+            resultsDiv.innerHTML = '';
+            searchInput.focus(); // Return focus to input after clearing
+        }
+
+        function showHighlighted(song) {
+            const search = document.getElementById('search').value.trim();
+            const words = search.split(/\s+/).filter(w => w);
+            if (words.length === 0) return;
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(fullHtml, 'text/html');
+            words.forEach(word => highlight(doc.body, word, song));
+
+            const newHtml = new XMLSerializer().serializeToString(doc);
+            const win = window.open('');
+            if (win) {
+                win.document.write(`
+                    <html>
+                        <head>
+                            <style>
+                                span.highlight { background-color: yellow; color: black; }
+                            </style>
+                        </head>
+                        <body>${newHtml}</body>
+                        <script>
+                            window.onload = function() {
+                                var highlight = document.querySelector('.highlight');
+                                if (highlight) {
+                                    highlight.scrollIntoView({behavior: 'smooth', block: 'center'});
+                                }
+                            };
+                        <\/script>
+                    </html>
+                `);
+                win.document.close();
+            }
+        }
+
+        function highlight(node, term, targetSong) {
+            if (node.nodeType === 3) {
+                const text = node.textContent;
+                const lowerText = text.toLowerCase();
+                const lowerTerm = term.toLowerCase();
+                if (lowerText.includes(lowerTerm) && (!targetSong || text === targetSong)) {
+                    const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                    const parts = text.split(regex);
+                    const fragment = document.createDocumentFragment();
+                    parts.forEach((part, index) => {
+                        if (index % 2 === 1) {
+                            const span = document.createElement('span');
+                            span.className = 'highlight';
+                            span.textContent = part;
+                            fragment.appendChild(span);
+                        } else {
+                            fragment.appendChild(document.createTextNode(part));
+                        }
+                    });
+                    node.parentNode.replaceChild(fragment, node);
+                }
+            } else {
+                const children = Array.from(node.childNodes);
+                children.forEach(child => highlight(child, term, targetSong));
+            }
+        }
+    </script>
+</body>
+</html>
